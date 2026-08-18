@@ -13,14 +13,24 @@ async function loadPdfJs(): Promise<any> {
   if (loadPromise) return loadPromise;
 
   isLoading = true;
-  // @ts-expect-error - pdfjs-dist/build/pdf.mjs is not a module
-  loadPromise = import("pdfjs-dist/build/pdf.mjs").then((lib) => {
-    // Set the worker source to use local file
-    lib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
-    pdfjsLib = lib;
-    isLoading = false;
-    return lib;
-  });
+
+  loadPromise = Promise.all([
+    import("pdfjs-dist/build/pdf.mjs"),
+    import("pdfjs-dist/build/pdf.worker.min.mjs?url"),
+  ])
+    .then(([lib, workerUrl]) => {
+      lib.GlobalWorkerOptions.workerSrc = workerUrl.default;
+
+      pdfjsLib = lib;
+      isLoading = false;
+
+      return lib;
+    })
+    .catch((error) => {
+      isLoading = false;
+      loadPromise = null;
+      throw error;
+    });
 
   return loadPromise;
 }
@@ -30,7 +40,7 @@ export async function convertPdfToImage(
 ): Promise<PdfConversionResult> {
   try {
     const lib = await loadPdfJs();
-
+// console.log(lib, 'KK')
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await lib.getDocument({ data: arrayBuffer }).promise;
     const page = await pdf.getPage(1);
